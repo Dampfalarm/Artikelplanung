@@ -26,6 +26,7 @@ builder.Services.AddDbContextFactory<ApplicationDbContext>(options =>
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddScoped<ArtikelService>();
 builder.Services.AddScoped<ArtikelImportService>();
+builder.Services.AddScoped<AktivePersonState>();
 
 var app = builder.Build();
 

@@ -16,16 +16,6 @@ public class ArtikelService(IDbContextFactory<ApplicationDbContext> dbFactory)
             .ToListAsync(ct);
     }
 
-    public async Task<List<string>> GetBekanntePersonenAsync(CancellationToken ct = default)
-    {
-        await using var db = await dbFactory.CreateDbContextAsync(ct);
-        return await db.ArtikelEintraege
-            .Select(a => a.EingetragenVon)
-            .Distinct()
-            .OrderBy(p => p)
-            .ToListAsync(ct);
-    }
-
     public async Task<ArtikelEintrag> AddAsync(ArtikelEintrag eintrag, CancellationToken ct = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(ct);

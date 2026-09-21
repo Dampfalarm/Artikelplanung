@@ -5,6 +5,8 @@
 @using Artikelplanung.Web.Services.Import
 @inject ArtikelService ArtikelService
 @inject ArtikelImportService ArtikelImportService
+@inject AktivePersonState AktivePerson
+@implements IDisposable
 
 <PageTitle>Artikelplanung</PageTitle>
 
@@ -40,16 +42,10 @@ else
             </div>
             <div class="col-md-2">
                 <label class="form-label">Eingetragen von</label>
-                <InputText @bind-Value="neu.EingetragenVon" class="form-control" list="personen" />
-                <datalist id="personen">
-                    @foreach (var person in bekanntePersonen)
-                    {
-                        <option value="@person" />
-                    }
-                </datalist>
+                <input class="form-control" value="@AktivePerson.Name" disabled />
             </div>
             <div class="col-md-1">
-                <button type="submit" class="btn btn-primary w-100">Anlegen</button>
+                <button type="submit" class="btn btn-primary w-100" disabled="@(AktivePerson.Name is null)">Anlegen</button>
             </div>
             <div class="col-md-8">
                 <label class="form-label">Notiz</label>
@@ -175,7 +171,6 @@ else
 
 @code {
     private List<ArtikelEintrag>? eintraege;
-    private List<string> bekanntePersonen = [];
     private readonly HashSet<int> aufgeklappt = [];
     private bool zeigeNeuFormular;
     private NeuerEintrag neu = new();
@@ -186,13 +181,18 @@ else
 
     protected override async Task OnInitializedAsync()
     {
+        AktivePerson.OnChange += StateHasChanged;
         await LadenAsync();
+    }
+
+    public void Dispose()
+    {
+        AktivePerson.OnChange -= StateHasChanged;
     }
 
     private async Task LadenAsync()
     {
         eintraege = await ArtikelService.GetAllAsync();
-        bekanntePersonen = await ArtikelService.GetBekanntePersonenAsync();
     }
 
     private async Task NeueImportDateiAusgewaeltAsync(InputFileChangeEventArgs e)
@@ -214,12 +214,14 @@ else
 
     private async Task AnlegenAsync()
     {
+        if (AktivePerson.Name is not { } person) return;
+
         await ArtikelService.AddAsync(new ArtikelEintrag
         {
             Artikelname = neu.Artikelname,
             Prioritaet = neu.Prioritaet,
             ReleaseDatum = neu.ReleaseDatum,
-            EingetragenVon = neu.EingetragenVon,
+            EingetragenVon = person,
             Notiz = string.IsNullOrWhiteSpace(neu.Notiz) ? null : neu.Notiz,
             ImportTabelleJson = neuImportTabelle?.ToJson(),
             Quelle = neuImportDateiname,
@@ -303,7 +305,6 @@ else
         public string Artikelname { get; set; } = "";
         public Prioritaet Prioritaet { get; set; } = Prioritaet.Mittel;
         public DateOnly? ReleaseDatum { get; set; }
-        public string EingetragenVon { get; set; } = "";
         public string? Notiz { get; set; }
     }
 }

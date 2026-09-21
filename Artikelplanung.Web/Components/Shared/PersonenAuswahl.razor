@@ -1,0 +1,54 @@
+@using Artikelplanung.Web.Models
+@using Artikelplanung.Web.Services
+@inject IJSRuntime JS
+@inject AktivePersonState AktivePerson
+
+@if (AktivePerson.Name is null || zeigeAuswahl)
+{
+    <div class="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center"
+         style="background: rgba(0,0,0,.5); z-index: 1050;">
+        <div class="bg-white p-4 rounded shadow" style="min-width: 20rem;">
+            <h2 class="h5 mb-3">Wer sitzt gerade am PC?</h2>
+            <div class="d-grid gap-2">
+                @foreach (var person in Personen.Alle)
+                {
+                    <button type="button" class="btn btn-outline-primary" @onclick="() => AuswaehlenAsync(person)">@person</button>
+                }
+            </div>
+            @if (AktivePerson.Name is not null)
+            {
+                <button type="button" class="btn btn-link mt-2" @onclick="() => zeigeAuswahl = false">Abbrechen</button>
+            }
+        </div>
+    </div>
+}
+else
+{
+    <span class="small">
+        Angemeldet als <strong>@AktivePerson.Name</strong>
+        <button type="button" class="btn btn-link btn-sm p-0 ms-1" @onclick="() => zeigeAuswahl = true">wechseln</button>
+    </span>
+}
+
+@code {
+    private bool zeigeAuswahl;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+
+        var gespeichert = await JS.InvokeAsync<string?>("personCookie.get");
+        if (gespeichert is not null && Personen.Alle.Contains(gespeichert))
+        {
+            AktivePerson.Setzen(gespeichert);
+            StateHasChanged();
+        }
+    }
+
+    private async Task AuswaehlenAsync(string person)
+    {
+        await JS.InvokeVoidAsync("personCookie.set", person);
+        AktivePerson.Setzen(person);
+        zeigeAuswahl = false;
+    }
+}

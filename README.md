@@ -15,8 +15,10 @@ importieren, Priorität setzen, optional ein Release-Datum, Status verfolgen.
 ## Entschiedene Punkte (21.09.2026)
 
 - **Kein Login.** Nur im Firmennetz erreichbar, das reicht als Zugriffsschutz. Stattdessen
-  ein freies "Eingetragen von"-Feld (mit Autovervollständigung aus bisherigen Werten) für
-  Zuordnung, keine Zugriffssteuerung.
+  wählt man beim ersten Öffnen aus einer festen Namensliste (Florian, Benny, Michael, Simon,
+  Heiko, Eren, Dominik), wer gerade am PC sitzt; ein Browser-Cookie merkt sich das (1 Jahr,
+  `PersonenAuswahl.razor` + `wwwroot/js/person-cookie.js`), "Eingetragen von" füllt sich danach
+  automatisch, mit sichtbarem "wechseln"-Link oben rechts. Keine Zugriffssteuerung, nur Zuordnung.
 - **Priorität**: Hoch / Mittel / Niedrig, keine feinere Stufung.
 - **Ein Import ist ein Anhang an einen Artikel, keine Artikel-Fabrik.** Eine Herstellerliste mit
   z. B. acht Geschmacksrichtungen legt nicht acht Zeilen in der Planung an, sondern hängt ihre
