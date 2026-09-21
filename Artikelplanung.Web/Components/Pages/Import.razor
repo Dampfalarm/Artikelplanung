@@ -1,0 +1,180 @@
+@page "/import"
+@rendermode InteractiveServer
+@using Artikelplanung.Web.Models
+@using Artikelplanung.Web.Services.Import
+@inject Artikelplanung.Web.Services.Import.ArtikelImportService ImportService
+@inject Artikelplanung.Web.Services.ArtikelService ArtikelService
+@inject NavigationManager NavigationManager
+
+<PageTitle>Excel-Import</PageTitle>
+
+<h1>Excel-Import</h1>
+<p class="text-muted">Eine Herstellerliste (.xlsx) einlesen. Die Kopfzeile wird erkannt, du wählst danach nur, welche Spalte der Artikelname und – falls vorhanden – die EAN ist. Der Rest bleibt beim jeweiligen Artikel als Detail erhalten.</p>
+
+@if (fehler is not null)
+{
+    <div class="alert alert-danger">@fehler</div>
+}
+
+@if (erfolgreichImportiert is int anzahl)
+{
+    <div class="alert alert-success">
+        @anzahl Artikel importiert. <a href="/">Zur Artikelliste</a>
+    </div>
+}
+
+@if (tabelle is null)
+{
+    <InputFile OnChange="DateiAusgewaeltAsync" class="form-control" accept=".xlsx" />
+}
+else
+{
+    <div class="row g-2 mb-3">
+        <div class="col-md-3">
+            <label class="form-label">Spalte für Artikelname</label>
+            <select class="form-select" @bind="artikelnameSpalte">
+                @foreach (var h in tabelle.Headers)
+                {
+                    <option value="@h">@h</option>
+                }
+            </select>
+        </div>
+        <div class="col-md-3">
+            <label class="form-label">Spalte für EAN</label>
+            <select class="form-select" @bind="eanSpalte">
+                <option value="">– keine –</option>
+                @foreach (var h in tabelle.Headers)
+                {
+                    <option value="@h">@h</option>
+                }
+            </select>
+        </div>
+        <div class="col-md-2">
+            <label class="form-label">Priorität</label>
+            <select class="form-select" @bind="prioritaet">
+                @foreach (var p in Enum.GetValues<Prioritaet>())
+                {
+                    <option value="@p">@Label(p)</option>
+                }
+            </select>
+        </div>
+        <div class="col-md-2">
+            <label class="form-label">Eingetragen von</label>
+            <input class="form-control" @bind="eingetragenVon" list="personen" />
+            <datalist id="personen">
+                @foreach (var person in bekanntePersonen)
+                {
+                    <option value="@person" />
+                }
+            </datalist>
+        </div>
+        <div class="col-md-2 d-flex align-items-end">
+            <button type="button" class="btn btn-secondary w-100" @onclick="Abbrechen">Andere Datei wählen</button>
+        </div>
+    </div>
+
+    var vorschau = ArtikelImportService.BuildPreview(tabelle, artikelnameSpalte, string.IsNullOrEmpty(eanSpalte) ? null : eanSpalte);
+
+    <p>@vorschau.Count Artikel gefunden (@(tabelle.Headers.Count - (string.IsNullOrEmpty(eanSpalte) ? 1 : 2)) weitere Spalten je Artikel als Detail).</p>
+
+    <table class="table table-sm">
+        <thead>
+            <tr>
+                <th>Artikelname</th>
+                <th>EAN</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var zeile in vorschau.Take(20))
+            {
+                <tr>
+                    <td>@zeile.Artikelname</td>
+                    <td>@zeile.Ean</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+    @if (vorschau.Count > 20)
+    {
+        <p class="text-muted">… und @(vorschau.Count - 20) weitere.</p>
+    }
+
+    <button type="button" class="btn btn-primary" disabled="@(string.IsNullOrWhiteSpace(eingetragenVon) || importLaeuft)" @onclick="ImportierenAsync">
+        @(importLaeuft ? "Importiere…" : $"{vorschau.Count} Artikel importieren")
+    </button>
+}
+
+@code {
+    private SpreadsheetTable? tabelle;
+    private string dateiname = "";
+    private string artikelnameSpalte = "";
+    private string eanSpalte = "";
+    private Prioritaet prioritaet = Prioritaet.Mittel;
+    private string eingetragenVon = "";
+    private List<string> bekanntePersonen = [];
+    private string? fehler;
+    private int? erfolgreichImportiert;
+    private bool importLaeuft;
+
+    protected override async Task OnInitializedAsync()
+    {
+        bekanntePersonen = await ArtikelService.GetBekanntePersonenAsync();
+    }
+
+    private async Task DateiAusgewaeltAsync(InputFileChangeEventArgs e)
+    {
+        fehler = null;
+        erfolgreichImportiert = null;
+        try
+        {
+            await using var stream = e.File.OpenReadStream(maxAllowedSize: 20 * 1024 * 1024);
+            using var buffer = new MemoryStream();
+            await stream.CopyToAsync(buffer);
+            buffer.Position = 0;
+            tabelle = ArtikelImportService.ReadXlsx(buffer);
+            dateiname = e.File.Name;
+            artikelnameSpalte = tabelle.Headers.FirstOrDefault(h =>
+                h.Contains("bezeichnung", StringComparison.OrdinalIgnoreCase) ||
+                h.Contains("artikelname", StringComparison.OrdinalIgnoreCase) ||
+                h.Contains("name", StringComparison.OrdinalIgnoreCase)) ?? tabelle.Headers.First();
+            eanSpalte = tabelle.Headers.FirstOrDefault(h => h.Contains("ean", StringComparison.OrdinalIgnoreCase)) ?? "";
+        }
+        catch (Exception ex) when (ex is InvalidDataException or IOException)
+        {
+            fehler = $"Datei konnte nicht gelesen werden: {ex.Message}";
+            tabelle = null;
+        }
+    }
+
+    private async Task ImportierenAsync()
+    {
+        if (tabelle is null || string.IsNullOrWhiteSpace(eingetragenVon)) return;
+        importLaeuft = true;
+        try
+        {
+            var vorschau = ArtikelImportService.BuildPreview(tabelle, artikelnameSpalte, string.IsNullOrEmpty(eanSpalte) ? null : eanSpalte);
+            var anzahl = await ImportService.ImportAsync(vorschau, dateiname, eingetragenVon, prioritaet);
+            erfolgreichImportiert = anzahl;
+            tabelle = null;
+        }
+        finally
+        {
+            importLaeuft = false;
+        }
+    }
+
+    private void Abbrechen()
+    {
+        tabelle = null;
+        fehler = null;
+        erfolgreichImportiert = null;
+    }
+
+    private static string Label(Prioritaet p) => p switch
+    {
+        Prioritaet.Hoch => "Hoch",
+        Prioritaet.Mittel => "Mittel",
+        Prioritaet.Niedrig => "Niedrig",
+        _ => p.ToString(),
+    };
+}

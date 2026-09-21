@@ -1,0 +1,226 @@
+@page "/"
+@rendermode InteractiveServer
+@using Artikelplanung.Web.Models
+@using Artikelplanung.Web.Services
+@inject ArtikelService ArtikelService
+
+<PageTitle>Artikelplanung</PageTitle>
+
+<h1>Artikelplanung</h1>
+<p class="text-muted">Alle geplanten Artikel-Neuanlagen an einem Ort – Priorität, Release-Datum und wer dran ist.</p>
+
+@if (eintraege is null)
+{
+    <p><em>Lädt…</em></p>
+}
+else
+{
+    <details class="mb-4" open="@zeigeNeuFormular">
+        <summary class="h5" role="button" @onclick="() => zeigeNeuFormular = !zeigeNeuFormular" @onclick:preventDefault>Neuer Artikel</summary>
+        <EditForm Model="neu" OnValidSubmit="AnlegenAsync" class="row g-2 align-items-end mt-2">
+            <DataAnnotationsValidator />
+            <div class="col-md-3">
+                <label class="form-label">Artikelname</label>
+                <InputText @bind-Value="neu.Artikelname" class="form-control" />
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">EAN</label>
+                <InputText @bind-Value="neu.Ean" class="form-control" />
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Priorität</label>
+                <InputSelect @bind-Value="neu.Prioritaet" class="form-select">
+                    @foreach (var p in Enum.GetValues<Prioritaet>())
+                    {
+                        <option value="@p">@Label(p)</option>
+                    }
+                </InputSelect>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Release-Datum</label>
+                <InputDate @bind-Value="neu.ReleaseDatum" class="form-control" />
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Eingetragen von</label>
+                <InputText @bind-Value="neu.EingetragenVon" class="form-control" list="personen" />
+                <datalist id="personen">
+                    @foreach (var person in bekanntePersonen)
+                    {
+                        <option value="@person" />
+                    }
+                </datalist>
+            </div>
+            <div class="col-md-1">
+                <button type="submit" class="btn btn-primary w-100">Anlegen</button>
+            </div>
+            <div class="col-12">
+                <label class="form-label">Notiz</label>
+                <InputTextArea @bind-Value="neu.Notiz" class="form-control" rows="2" />
+            </div>
+        </EditForm>
+    </details>
+
+    @if (eintraege.Count == 0)
+    {
+        <p class="text-muted">Noch keine Artikel eingetragen. Entweder oben manuell anlegen oder eine Excel-Liste importieren.</p>
+    }
+    else
+    {
+        <table class="table align-middle">
+            <thead>
+                <tr>
+                    <th></th>
+                    <th>Priorität</th>
+                    <th>Artikelname</th>
+                    <th>EAN</th>
+                    <th>Release-Datum</th>
+                    <th>Status</th>
+                    <th>Eingetragen von</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var eintrag in eintraege)
+                {
+                    <tr>
+                        <td>
+                            @if (eintrag.ImportierteSpalten.Count > 0 || !string.IsNullOrWhiteSpace(eintrag.Notiz))
+                            {
+                                <button type="button" class="btn btn-sm btn-link" @onclick="() => ToggleAufklappen(eintrag.Id)">
+                                    @(aufgeklappt.Contains(eintrag.Id) ? "▾" : "▸")
+                                </button>
+                            }
+                        </td>
+                        <td>
+                            <span class="badge @PrioritaetsBadge(eintrag.Prioritaet)">@Label(eintrag.Prioritaet)</span>
+                        </td>
+                        <td>@eintrag.Artikelname</td>
+                        <td>@eintrag.Ean</td>
+                        <td>@(eintrag.ReleaseDatum?.ToString("dd.MM.yyyy") ?? "–")</td>
+                        <td>
+                            <select class="form-select form-select-sm" value="@eintrag.Status" @onchange="e => StatusAendernAsync(eintrag, e.Value!.ToString()!)">
+                                @foreach (var s in Enum.GetValues<ArtikelStatus>())
+                                {
+                                    <option value="@s">@Label(s)</option>
+                                }
+                            </select>
+                        </td>
+                        <td>@eintrag.EingetragenVon</td>
+                        <td>
+                            <button type="button" class="btn btn-sm btn-outline-danger" @onclick="() => LoeschenAsync(eintrag.Id)">Löschen</button>
+                        </td>
+                    </tr>
+                    @if (aufgeklappt.Contains(eintrag.Id))
+                    {
+                        <tr>
+                            <td></td>
+                            <td colspan="7">
+                                @if (!string.IsNullOrWhiteSpace(eintrag.Notiz))
+                                {
+                                    <p><strong>Notiz:</strong> @eintrag.Notiz</p>
+                                }
+                                @if (eintrag.ImportierteSpalten.Count > 0)
+                                {
+                                    <p class="text-muted mb-1">Aus @eintrag.Quelle importiert:</p>
+                                    <dl class="row mb-0">
+                                        @foreach (var spalte in eintrag.ImportierteSpalten.OrderBy(s => s.Reihenfolge))
+                                        {
+                                            <dt class="col-sm-3">@spalte.Spaltenname</dt>
+                                            <dd class="col-sm-9">@spalte.Wert</dd>
+                                        }
+                                    </dl>
+                                }
+                            </td>
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+    }
+}
+
+@code {
+    private List<ArtikelEintrag>? eintraege;
+    private List<string> bekanntePersonen = [];
+    private readonly HashSet<int> aufgeklappt = [];
+    private bool zeigeNeuFormular;
+    private NeuerEintrag neu = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LadenAsync();
+    }
+
+    private async Task LadenAsync()
+    {
+        eintraege = await ArtikelService.GetAllAsync();
+        bekanntePersonen = await ArtikelService.GetBekanntePersonenAsync();
+    }
+
+    private async Task AnlegenAsync()
+    {
+        await ArtikelService.AddAsync(new ArtikelEintrag
+        {
+            Artikelname = neu.Artikelname,
+            Ean = string.IsNullOrWhiteSpace(neu.Ean) ? null : neu.Ean,
+            Prioritaet = neu.Prioritaet,
+            ReleaseDatum = neu.ReleaseDatum,
+            EingetragenVon = neu.EingetragenVon,
+            Notiz = string.IsNullOrWhiteSpace(neu.Notiz) ? null : neu.Notiz,
+        });
+        neu = new();
+        zeigeNeuFormular = false;
+        await LadenAsync();
+    }
+
+    private async Task StatusAendernAsync(ArtikelEintrag eintrag, string neuerStatus)
+    {
+        eintrag.Status = Enum.Parse<ArtikelStatus>(neuerStatus);
+        await ArtikelService.UpdateAsync(eintrag);
+    }
+
+    private async Task LoeschenAsync(int id)
+    {
+        await ArtikelService.DeleteAsync(id);
+        await LadenAsync();
+    }
+
+    private void ToggleAufklappen(int id)
+    {
+        if (!aufgeklappt.Remove(id)) aufgeklappt.Add(id);
+    }
+
+    private static string Label(Prioritaet p) => p switch
+    {
+        Prioritaet.Hoch => "Hoch",
+        Prioritaet.Mittel => "Mittel",
+        Prioritaet.Niedrig => "Niedrig",
+        _ => p.ToString(),
+    };
+
+    private static string Label(ArtikelStatus s) => s switch
+    {
+        ArtikelStatus.Offen => "Offen",
+        ArtikelStatus.InArbeit => "In Arbeit",
+        ArtikelStatus.Angelegt => "Angelegt",
+        _ => s.ToString(),
+    };
+
+    private static string PrioritaetsBadge(Prioritaet p) => p switch
+    {
+        Prioritaet.Hoch => "text-bg-danger",
+        Prioritaet.Mittel => "text-bg-warning",
+        Prioritaet.Niedrig => "text-bg-secondary",
+        _ => "text-bg-secondary",
+    };
+
+    private class NeuerEintrag
+    {
+        public string Artikelname { get; set; } = "";
+        public string? Ean { get; set; }
+        public Prioritaet Prioritaet { get; set; } = Prioritaet.Mittel;
+        public DateOnly? ReleaseDatum { get; set; }
+        public string EingetragenVon { get; set; } = "";
+        public string? Notiz { get; set; }
+    }
+}

@@ -1,0 +1,21 @@
+## .NET
+bin/
+obj/
+*.user
+
+## SQLite (lokale Datenbank, nicht versionieren)
+*.db
+*.db-shm
+*.db-wal
+
+## IDE
+.vs/
+.vscode/
+*.swp
+
+## OS
+Thumbs.db
+.DS_Store
+
+## Veroeffentlichung (dotnet publish)
+publish/

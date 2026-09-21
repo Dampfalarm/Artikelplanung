@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="Artikelplanung.Tests/Artikelplanung.Tests.csproj" />
+  <Project Path="Artikelplanung.Web/Artikelplanung.Web.csproj" />
+</Solution>
