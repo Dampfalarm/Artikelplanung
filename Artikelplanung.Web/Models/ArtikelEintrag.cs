@@ -10,8 +10,6 @@ public class ArtikelEintrag
 
     public required string Artikelname { get; set; }
 
-    public string? Ean { get; set; }
-
     public Prioritaet Prioritaet { get; set; } = Prioritaet.Mittel;
 
     public ArtikelStatus Status { get; set; } = ArtikelStatus.Offen;

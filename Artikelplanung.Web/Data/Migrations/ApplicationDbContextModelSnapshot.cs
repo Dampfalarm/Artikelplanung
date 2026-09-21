@@ -27,9 +27,6 @@ namespace Artikelplanung.Web.Data.Migrations
                         .IsRequired()
                         .HasColumnType("TEXT");
 
-                    b.Property<string>("Ean")
-                        .HasColumnType("TEXT");
-
                     b.Property<string>("EingetragenVon")
                         .IsRequired()
                         .HasColumnType("TEXT");
@@ -56,8 +53,6 @@ namespace Artikelplanung.Web.Data.Migrations
                         .HasColumnType("INTEGER");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("Ean");
 
                     b.ToTable("ArtikelEintraege");
                 });

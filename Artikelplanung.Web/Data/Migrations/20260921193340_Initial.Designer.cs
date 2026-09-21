@@ -11,7 +11,7 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace Artikelplanung.Web.Data.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    [Migration("20260921192648_Initial")]
+    [Migration("20260921193340_Initial")]
     partial class Initial
     {
         /// <inheritdoc />
@@ -28,9 +28,6 @@ namespace Artikelplanung.Web.Data.Migrations
 
                     b.Property<string>("Artikelname")
                         .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Ean")
                         .HasColumnType("TEXT");
 
                     b.Property<string>("EingetragenVon")
@@ -59,8 +56,6 @@ namespace Artikelplanung.Web.Data.Migrations
                         .HasColumnType("INTEGER");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("Ean");
 
                     b.ToTable("ArtikelEintraege");
                 });

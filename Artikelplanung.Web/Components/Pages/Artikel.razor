@@ -21,13 +21,9 @@ else
         <summary class="h5" role="button" @onclick="() => zeigeNeuFormular = !zeigeNeuFormular" @onclick:preventDefault>Neuer Artikel</summary>
         <EditForm Model="neu" OnValidSubmit="AnlegenAsync" class="row g-2 align-items-end mt-2">
             <DataAnnotationsValidator />
-            <div class="col-md-3">
+            <div class="col-md-5">
                 <label class="form-label">Artikelname</label>
                 <InputText @bind-Value="neu.Artikelname" class="form-control" />
-            </div>
-            <div class="col-md-2">
-                <label class="form-label">EAN</label>
-                <InputText @bind-Value="neu.Ean" class="form-control" />
             </div>
             <div class="col-md-2">
                 <label class="form-label">Priorität</label>
@@ -86,7 +82,6 @@ else
                     <th></th>
                     <th>Priorität</th>
                     <th>Artikelname</th>
-                    <th>EAN</th>
                     <th>Release-Datum</th>
                     <th>Status</th>
                     <th>Eingetragen von</th>
@@ -106,7 +101,6 @@ else
                             <span class="badge @PrioritaetsBadge(eintrag.Prioritaet)">@Label(eintrag.Prioritaet)</span>
                         </td>
                         <td>@eintrag.Artikelname</td>
-                        <td>@eintrag.Ean</td>
                         <td>@(eintrag.ReleaseDatum?.ToString("dd.MM.yyyy") ?? "–")</td>
                         <td>
                             <select class="form-select form-select-sm" value="@eintrag.Status" @onchange="e => StatusAendernAsync(eintrag, e.Value!.ToString()!)">
@@ -125,7 +119,7 @@ else
                     {
                         <tr>
                             <td></td>
-                            <td colspan="7">
+                            <td colspan="6">
                                 @if (!string.IsNullOrWhiteSpace(eintrag.Notiz))
                                 {
                                     <p><strong>Notiz:</strong> @eintrag.Notiz</p>
@@ -223,7 +217,6 @@ else
         await ArtikelService.AddAsync(new ArtikelEintrag
         {
             Artikelname = neu.Artikelname,
-            Ean = string.IsNullOrWhiteSpace(neu.Ean) ? null : neu.Ean,
             Prioritaet = neu.Prioritaet,
             ReleaseDatum = neu.ReleaseDatum,
             EingetragenVon = neu.EingetragenVon,
@@ -308,7 +301,6 @@ else
     private class NeuerEintrag
     {
         public string Artikelname { get; set; } = "";
-        public string? Ean { get; set; }
         public Prioritaet Prioritaet { get; set; } = Prioritaet.Mittel;
         public DateOnly? ReleaseDatum { get; set; }
         public string EingetragenVon { get; set; } = "";

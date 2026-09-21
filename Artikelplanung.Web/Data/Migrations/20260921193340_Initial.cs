@@ -18,7 +18,6 @@ namespace Artikelplanung.Web.Data.Migrations
                     Id = table.Column<int>(type: "INTEGER", nullable: false)
                         .Annotation("Sqlite:Autoincrement", true),
                     Artikelname = table.Column<string>(type: "TEXT", nullable: false),
-                    Ean = table.Column<string>(type: "TEXT", nullable: true),
                     Prioritaet = table.Column<int>(type: "INTEGER", nullable: false),
                     Status = table.Column<int>(type: "INTEGER", nullable: false),
                     ReleaseDatum = table.Column<DateOnly>(type: "TEXT", nullable: true),
@@ -32,11 +31,6 @@ namespace Artikelplanung.Web.Data.Migrations
                 {
                     table.PrimaryKey("PK_ArtikelEintraege", x => x.Id);
                 });
-
-            migrationBuilder.CreateIndex(
-                name: "IX_ArtikelEintraege_Ean",
-                table: "ArtikelEintraege",
-                column: "Ean");
         }
 
         /// <inheritdoc />

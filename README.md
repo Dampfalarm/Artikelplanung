@@ -24,6 +24,9 @@ importieren, Priorität setzen, optional ein Release-Datum, Status verfolgen.
   beim Neuanlegen oder später bei jedem bestehenden Artikel. Im Ausklapp-Feld erscheint sie dann
   als vollständige Tabelle (siehe Testfixture `Artikelplanung.Tests/TestData/SIC-Longfill.xlsx`).
   Bewusst kein festes Spaltenschema dafür, weil jede Herstellerliste andere Spalten mitbringt.
+  Deshalb auch kein eigenes EAN-Feld am Artikel mehr: Ein Planungs-Eintrag kann mehrere EANs
+  über den Import mitbringen (z. B. eine je Geschmacksrichtung), die stehen dann in der
+  angehängten Tabelle.
 - **Gleicher Stack wie die Rechnungsablage** (Blazor Server + EF Core + SQLite, WAL-Modus,
   lauffähig als Windows-Dienst) – bewusst, weil das Muster sich dort schon bewährt hat und
   keine Cloud-Infra/-Kosten braucht.
@@ -44,10 +47,10 @@ Artikelplanung/
 
 ## Datenmodell (Kurzfassung)
 
-`ArtikelEintrag`: Artikelname, EAN, Priorität, Status, Release-Datum (optional), eingetragen
-von, Notiz, Import-Quelle (Dateiname) und `ImportTabelleJson` – die komplette angehängte
+`ArtikelEintrag`: Artikelname, Priorität, Status, Release-Datum (optional), eingetragen von,
+Notiz, Import-Quelle (Dateiname) und `ImportTabelleJson` – die komplette angehängte
 Excel-Tabelle (Kopfzeile + Zeilen) als JSON, höchstens eine pro Artikel, ein erneuter Import
-ersetzt die vorherige.
+ersetzt die vorherige. Kein eigenes EAN-Feld (siehe oben).
 
 ## Starten
 
