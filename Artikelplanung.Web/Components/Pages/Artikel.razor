@@ -2,12 +2,14 @@
 @rendermode InteractiveServer
 @using Artikelplanung.Web.Models
 @using Artikelplanung.Web.Services
+@using Artikelplanung.Web.Services.Import
 @inject ArtikelService ArtikelService
+@inject ArtikelImportService ArtikelImportService
 
 <PageTitle>Artikelplanung</PageTitle>
 
 <h1>Artikelplanung</h1>
-<p class="text-muted">Alle geplanten Artikel-Neuanlagen an einem Ort – Priorität, Release-Datum und wer dran ist.</p>
+<p class="text-muted">Alle geplanten Artikel-Neuanlagen an einem Ort – Priorität, Release-Datum und wer dran ist. Excel-Listen kannst du beim Anlegen oder später bei jedem Artikel anhängen, sie werden im Ausklapp-Feld angezeigt.</p>
 
 @if (eintraege is null)
 {
@@ -53,16 +55,28 @@ else
             <div class="col-md-1">
                 <button type="submit" class="btn btn-primary w-100">Anlegen</button>
             </div>
-            <div class="col-12">
+            <div class="col-md-8">
                 <label class="form-label">Notiz</label>
                 <InputTextArea @bind-Value="neu.Notiz" class="form-control" rows="2" />
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">Excel-Liste anhängen (optional)</label>
+                <InputFile OnChange="NeueImportDateiAusgewaeltAsync" class="form-control" accept=".xlsx" />
+                @if (neuImportDateiname is not null)
+                {
+                    <div class="form-text">@neuImportDateiname (@neuImportTabelle?.Rows.Count Zeilen erkannt)</div>
+                }
+                @if (neuImportFehler is not null)
+                {
+                    <div class="text-danger">@neuImportFehler</div>
+                }
             </div>
         </EditForm>
     </details>
 
     @if (eintraege.Count == 0)
     {
-        <p class="text-muted">Noch keine Artikel eingetragen. Entweder oben manuell anlegen oder eine Excel-Liste importieren.</p>
+        <p class="text-muted">Noch keine Artikel eingetragen.</p>
     }
     else
     {
@@ -84,12 +98,9 @@ else
                 {
                     <tr>
                         <td>
-                            @if (eintrag.ImportierteSpalten.Count > 0 || !string.IsNullOrWhiteSpace(eintrag.Notiz))
-                            {
-                                <button type="button" class="btn btn-sm btn-link" @onclick="() => ToggleAufklappen(eintrag.Id)">
-                                    @(aufgeklappt.Contains(eintrag.Id) ? "▾" : "▸")
-                                </button>
-                            }
+                            <button type="button" class="btn btn-sm btn-link" @onclick="() => ToggleAufklappen(eintrag.Id)">
+                                @(aufgeklappt.Contains(eintrag.Id) ? "▾" : "▸")
+                            </button>
                         </td>
                         <td>
                             <span class="badge @PrioritaetsBadge(eintrag.Prioritaet)">@Label(eintrag.Prioritaet)</span>
@@ -119,16 +130,45 @@ else
                                 {
                                     <p><strong>Notiz:</strong> @eintrag.Notiz</p>
                                 }
-                                @if (eintrag.ImportierteSpalten.Count > 0)
+
+                                @if (eintrag.ImportTabelleJson is { } json)
                                 {
-                                    <p class="text-muted mb-1">Aus @eintrag.Quelle importiert:</p>
-                                    <dl class="row mb-0">
-                                        @foreach (var spalte in eintrag.ImportierteSpalten.OrderBy(s => s.Reihenfolge))
-                                        {
-                                            <dt class="col-sm-3">@spalte.Spaltenname</dt>
-                                            <dd class="col-sm-9">@spalte.Wert</dd>
-                                        }
-                                    </dl>
+                                    var tabelle = SpreadsheetTable.FromJson(json);
+                                    <p class="text-muted mb-1">Aus <strong>@eintrag.Quelle</strong> importiert (@tabelle.Rows.Count Zeilen):</p>
+                                    <div class="table-responsive mb-2">
+                                        <table class="table table-sm table-bordered">
+                                            <thead>
+                                                <tr>
+                                                    @foreach (var header in tabelle.Headers)
+                                                    {
+                                                        <th>@header</th>
+                                                    }
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                @foreach (var zeile in tabelle.Rows)
+                                                {
+                                                    <tr>
+                                                        @for (var i = 0; i < tabelle.Headers.Count; i++)
+                                                        {
+                                                            <td>@(i < zeile.Count ? zeile[i] : null)</td>
+                                                        }
+                                                    </tr>
+                                                }
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                    <label class="form-label">Andere Datei anhängen (ersetzt die aktuelle Liste)</label>
+                                }
+                                else
+                                {
+                                    <p class="text-muted mb-1">Noch keine Excel-Liste angehängt.</p>
+                                    <label class="form-label">Excel-Liste anhängen</label>
+                                }
+                                <InputFile OnChange="e => AnhaengenAsync(eintrag.Id, e)" class="form-control" accept=".xlsx" style="max-width: 24rem" />
+                                @if (anhaengenFehler is { } fehler && fehler.ArtikelId == eintrag.Id)
+                                {
+                                    <div class="text-danger">@fehler.Meldung</div>
                                 }
                             </td>
                         </tr>
@@ -145,6 +185,10 @@ else
     private readonly HashSet<int> aufgeklappt = [];
     private bool zeigeNeuFormular;
     private NeuerEintrag neu = new();
+    private string? neuImportDateiname;
+    private SpreadsheetTable? neuImportTabelle;
+    private string? neuImportFehler;
+    private (int ArtikelId, string Meldung)? anhaengenFehler;
 
     protected override async Task OnInitializedAsync()
     {
@@ -157,6 +201,23 @@ else
         bekanntePersonen = await ArtikelService.GetBekanntePersonenAsync();
     }
 
+    private async Task NeueImportDateiAusgewaeltAsync(InputFileChangeEventArgs e)
+    {
+        neuImportFehler = null;
+        try
+        {
+            var tabelle = await LiesXlsxAsync(e.File);
+            neuImportTabelle = tabelle;
+            neuImportDateiname = e.File.Name;
+        }
+        catch (Exception ex) when (ex is InvalidDataException or IOException)
+        {
+            neuImportFehler = $"Datei konnte nicht gelesen werden: {ex.Message}";
+            neuImportTabelle = null;
+            neuImportDateiname = null;
+        }
+    }
+
     private async Task AnlegenAsync()
     {
         await ArtikelService.AddAsync(new ArtikelEintrag
@@ -167,10 +228,40 @@ else
             ReleaseDatum = neu.ReleaseDatum,
             EingetragenVon = neu.EingetragenVon,
             Notiz = string.IsNullOrWhiteSpace(neu.Notiz) ? null : neu.Notiz,
+            ImportTabelleJson = neuImportTabelle?.ToJson(),
+            Quelle = neuImportDateiname,
         });
         neu = new();
+        neuImportTabelle = null;
+        neuImportDateiname = null;
+        neuImportFehler = null;
         zeigeNeuFormular = false;
         await LadenAsync();
+    }
+
+    private async Task AnhaengenAsync(int artikelId, InputFileChangeEventArgs e)
+    {
+        anhaengenFehler = null;
+        try
+        {
+            var tabelle = await LiesXlsxAsync(e.File);
+            await ArtikelImportService.AttachAsync(artikelId, tabelle, e.File.Name);
+            aufgeklappt.Add(artikelId);
+            await LadenAsync();
+        }
+        catch (Exception ex) when (ex is InvalidDataException or IOException)
+        {
+            anhaengenFehler = (artikelId, $"Datei konnte nicht gelesen werden: {ex.Message}");
+        }
+    }
+
+    private static async Task<SpreadsheetTable> LiesXlsxAsync(IBrowserFile file)
+    {
+        await using var stream = file.OpenReadStream(maxAllowedSize: 20 * 1024 * 1024);
+        using var buffer = new MemoryStream();
+        await stream.CopyToAsync(buffer);
+        buffer.Position = 0;
+        return ArtikelImportService.ReadXlsx(buffer);
     }
 
     private async Task StatusAendernAsync(ArtikelEintrag eintrag, string neuerStatus)

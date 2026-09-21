@@ -10,7 +10,6 @@ public class ArtikelService(IDbContextFactory<ApplicationDbContext> dbFactory)
     {
         await using var db = await dbFactory.CreateDbContextAsync(ct);
         return await db.ArtikelEintraege
-            .Include(a => a.ImportierteSpalten)
             .OrderByDescending(a => a.Prioritaet)
             .ThenBy(a => a.ReleaseDatum)
             .ThenByDescending(a => a.ErstelltAm)

@@ -11,7 +11,7 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace Artikelplanung.Web.Data.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    [Migration("20260921191503_Initial")]
+    [Migration("20260921192648_Initial")]
     partial class Initial
     {
         /// <inheritdoc />
@@ -40,6 +40,9 @@ namespace Artikelplanung.Web.Data.Migrations
                     b.Property<DateTime>("ErstelltAm")
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("ImportTabelleJson")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("Notiz")
                         .HasColumnType("TEXT");
 
@@ -60,46 +63,6 @@ namespace Artikelplanung.Web.Data.Migrations
                     b.HasIndex("Ean");
 
                     b.ToTable("ArtikelEintraege");
-                });
-
-            modelBuilder.Entity("Artikelplanung.Web.Models.ImportierteSpalte", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
-
-                    b.Property<int>("ArtikelEintragId")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<int>("Reihenfolge")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("Spaltenname")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Wert")
-                        .HasColumnType("TEXT");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ArtikelEintragId");
-
-                    b.ToTable("ImportierteSpalten");
-                });
-
-            modelBuilder.Entity("Artikelplanung.Web.Models.ImportierteSpalte", b =>
-                {
-                    b.HasOne("Artikelplanung.Web.Models.ArtikelEintrag", null)
-                        .WithMany("ImportierteSpalten")
-                        .HasForeignKey("ArtikelEintragId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("Artikelplanung.Web.Models.ArtikelEintrag", b =>
-                {
-                    b.Navigation("ImportierteSpalten");
                 });
 #pragma warning restore 612, 618
         }

@@ -18,10 +18,12 @@ importieren, Priorität setzen, optional ein Release-Datum, Status verfolgen.
   ein freies "Eingetragen von"-Feld (mit Autovervollständigung aus bisherigen Werten) für
   Zuordnung, keine Zugriffssteuerung.
 - **Priorität**: Hoch / Mittel / Niedrig, keine feinere Stufung.
-- **Excel-Import ist spaltenflexibel.** Jede Herstellerliste bringt andere Spalten mit (siehe
-  Testfixture `Artikelplanung.Tests/TestData/SIC-Longfill.xlsx`). Nur Artikelname und EAN sind
-  feste Spalten in der Übersicht; alles andere aus einer importierten Zeile landet unverändert
-  im Ausklapp-Bereich des jeweiligen Artikels, nicht in festen Datenbankspalten.
+- **Ein Import ist ein Anhang an einen Artikel, keine Artikel-Fabrik.** Eine Herstellerliste mit
+  z. B. acht Geschmacksrichtungen legt nicht acht Zeilen in der Planung an, sondern hängt ihre
+  komplette Tabelle unverändert an den einen Artikel(-Vorhaben), zu dem sie gehört – anhängbar
+  beim Neuanlegen oder später bei jedem bestehenden Artikel. Im Ausklapp-Feld erscheint sie dann
+  als vollständige Tabelle (siehe Testfixture `Artikelplanung.Tests/TestData/SIC-Longfill.xlsx`).
+  Bewusst kein festes Spaltenschema dafür, weil jede Herstellerliste andere Spalten mitbringt.
 - **Gleicher Stack wie die Rechnungsablage** (Blazor Server + EF Core + SQLite, WAL-Modus,
   lauffähig als Windows-Dienst) – bewusst, weil das Muster sich dort schon bewährt hat und
   keine Cloud-Infra/-Kosten braucht.
@@ -43,8 +45,9 @@ Artikelplanung/
 ## Datenmodell (Kurzfassung)
 
 `ArtikelEintrag`: Artikelname, EAN, Priorität, Status, Release-Datum (optional), eingetragen
-von, Notiz, Import-Quelle. Dazu `ImportierteSpalte` (Spaltenname/Wert/Reihenfolge) – beliebig
-viele pro Artikel, für die Rohdaten aus einem Excel-Import.
+von, Notiz, Import-Quelle (Dateiname) und `ImportTabelleJson` – die komplette angehängte
+Excel-Tabelle (Kopfzeile + Zeilen) als JSON, höchstens eine pro Artikel, ein erneuter Import
+ersetzt die vorherige.
 
 ## Starten
 
