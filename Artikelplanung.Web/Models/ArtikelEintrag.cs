@@ -10,9 +10,14 @@ public class ArtikelEintrag
 
     public required string Artikelname { get; set; }
 
+    public Marke Marke { get; set; } = Marke.Dampfalarm;
+
     public Prioritaet Prioritaet { get; set; } = Prioritaet.Mittel;
 
     public ArtikelStatus Status { get; set; } = ArtikelStatus.Offen;
+
+    /// <summary>Aus der Liste genommen, nicht gelöscht.</summary>
+    public bool Archiviert { get; set; }
 
     public DateOnly? ReleaseDatum { get; set; }
 

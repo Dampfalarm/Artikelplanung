@@ -1,0 +1,23 @@
+@using Artikelplanung.Web.Models
+
+<span class="badge @Klasse">@Label</span>
+
+@code {
+    [Parameter] public Prioritaet Prioritaet { get; set; }
+
+    private string Label => Prioritaet switch
+    {
+        Prioritaet.Hoch => "Hoch",
+        Prioritaet.Mittel => "Mittel",
+        Prioritaet.Niedrig => "Niedrig",
+        _ => Prioritaet.ToString(),
+    };
+
+    private string Klasse => Prioritaet switch
+    {
+        Prioritaet.Hoch => "critical",
+        Prioritaet.Mittel => "warn",
+        Prioritaet.Niedrig => "info",
+        _ => "info",
+    };
+}

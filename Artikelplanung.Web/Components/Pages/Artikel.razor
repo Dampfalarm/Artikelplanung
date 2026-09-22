@@ -1,193 +1,573 @@
 @page "/"
 @rendermode InteractiveServer
+@using System.Globalization
 @using Artikelplanung.Web.Models
 @using Artikelplanung.Web.Services
 @using Artikelplanung.Web.Services.Import
 @inject ArtikelService ArtikelService
 @inject ArtikelImportService ArtikelImportService
 @inject AktivePersonState AktivePerson
-@implements IDisposable
+@inject IJSRuntime JS
+@implements IAsyncDisposable
 
 <PageTitle>Artikelplanung</PageTitle>
 
-<h1>Artikelplanung</h1>
-<p class="text-muted">Alle geplanten Artikel-Neuanlagen an einem Ort – Priorität, Release-Datum und wer dran ist. Excel-Listen kannst du beim Anlegen oder später bei jedem Artikel anhängen, sie werden im Ausklapp-Feld angezeigt.</p>
+<div class="app">
+    <aside class="sidebar">
+        <div class="brand">
+            <span class="brand-mark">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 7l9-4 9 4v10l-9 4-9-4z"></path><path d="M3 7l9 4 9-4M12 11v10"></path></svg>
+            </span>
+            <span style="min-width:0">
+                <span class="brand-name" style="display:block">Artikelplanung</span>
+                <span class="brand-sub">Neuanlagen</span>
+            </span>
+            <button type="button" class="theme-toggle" @onclick="ThemeUmschaltenAsync" title="@ThemeTitel">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="@ThemeIconPfad"></path></svg>
+            </button>
+        </div>
 
-@if (eintraege is null)
-{
-    <p><em>Lädt…</em></p>
-}
-else
-{
-    <details class="mb-4" open="@zeigeNeuFormular">
-        <summary class="h5" role="button" @onclick="() => zeigeNeuFormular = !zeigeNeuFormular" @onclick:preventDefault>Neuer Artikel</summary>
-        <EditForm Model="neu" OnValidSubmit="AnlegenAsync" class="row g-2 align-items-end mt-2">
-            <DataAnnotationsValidator />
-            <div class="col-md-5">
-                <label class="form-label">Artikelname</label>
-                <InputText @bind-Value="neu.Artikelname" class="form-control" />
-            </div>
-            <div class="col-md-2">
-                <label class="form-label">Priorität</label>
-                <InputSelect @bind-Value="neu.Prioritaet" class="form-select">
-                    @foreach (var p in Enum.GetValues<Prioritaet>())
-                    {
-                        <option value="@p">@Label(p)</option>
-                    }
-                </InputSelect>
-            </div>
-            <div class="col-md-2">
-                <label class="form-label">Release-Datum</label>
-                <InputDate @bind-Value="neu.ReleaseDatum" class="form-control" />
-            </div>
-            <div class="col-md-2">
-                <label class="form-label">Eingetragen von</label>
-                <input class="form-control" value="@AktivePerson.Name" disabled />
-            </div>
-            <div class="col-md-1">
-                <button type="submit" class="btn btn-primary w-100" disabled="@(AktivePerson.Name is null)">Anlegen</button>
-            </div>
-            <div class="col-md-8">
-                <label class="form-label">Notiz</label>
-                <InputTextArea @bind-Value="neu.Notiz" class="form-control" rows="2" />
-            </div>
-            <div class="col-md-4">
-                <label class="form-label">Excel-Liste anhängen (optional)</label>
-                <InputFile OnChange="NeueImportDateiAusgewaeltAsync" class="form-control" accept=".xlsx" />
-                @if (neuImportDateiname is not null)
-                {
-                    <div class="form-text">@neuImportDateiname (@neuImportTabelle?.Rows.Count Zeilen erkannt)</div>
-                }
-                @if (neuImportFehler is not null)
-                {
-                    <div class="text-danger">@neuImportFehler</div>
-                }
-            </div>
-        </EditForm>
-    </details>
+        <nav class="primary-nav">
+            <button type="button" class="nav-btn" aria-current="@(ansicht == Ansicht.Neuanlagen ? "page" : null)" @onclick="() => AnsichtWechseln(Ansicht.Neuanlagen)">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 6h16M4 12h16M4 18h10"></path></svg>
+                Neuanlagen
+            </button>
+            <button type="button" class="nav-btn" aria-current="@(ansicht == Ansicht.Statusspalten ? "page" : null)" @onclick="() => AnsichtWechseln(Ansicht.Statusspalten)">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 4h5v16H4zM10 4h4v11h-4zM15 4h5v7h-5z"></path></svg>
+                Statusspalten
+            </button>
+            <button type="button" class="nav-btn" aria-current="@(ansicht == Ansicht.Zeitachse ? "page" : null)" @onclick="() => AnsichtWechseln(Ansicht.Zeitachse)">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 5h18v16H3zM3 10h18M8 3v4M16 3v4"></path></svg>
+                Zeitachse
+            </button>
+        </nav>
 
-    @if (eintraege.Count == 0)
-    {
-        <p class="text-muted">Noch keine Artikel eingetragen.</p>
-    }
-    else
-    {
-        <table class="table align-middle">
-            <thead>
-                <tr>
-                    <th></th>
-                    <th>Priorität</th>
-                    <th>Artikelname</th>
-                    <th>Release-Datum</th>
-                    <th>Status</th>
-                    <th>Eingetragen von</th>
-                    <th></th>
-                </tr>
-            </thead>
-            <tbody>
-                @foreach (var eintrag in eintraege)
-                {
-                    <tr>
-                        <td>
-                            <button type="button" class="btn btn-sm btn-link" @onclick="() => ToggleAufklappen(eintrag.Id)">
-                                @(aufgeklappt.Contains(eintrag.Id) ? "▾" : "▸")
-                            </button>
-                        </td>
-                        <td>
-                            <span class="badge @PrioritaetsBadge(eintrag.Prioritaet)">@Label(eintrag.Prioritaet)</span>
-                        </td>
-                        <td>@eintrag.Artikelname</td>
-                        <td>@(eintrag.ReleaseDatum?.ToString("dd.MM.yyyy") ?? "–")</td>
-                        <td>
-                            <select class="form-select form-select-sm" value="@eintrag.Status" @onchange="e => StatusAendernAsync(eintrag, e.Value!.ToString()!)">
-                                @foreach (var s in Enum.GetValues<ArtikelStatus>())
+        <div class="sidebar-foot">
+            <div>Eingetragen als <strong>@(AktivePerson.Name ?? "niemand")</strong></div>
+            <button type="button" class="btn tiny" @onclick="() => AktivePerson.Zuruecksetzen()">Person wechseln</button>
+            <div>Nur im Firmennetz · kein Login</div>
+        </div>
+    </aside>
+
+    <main>
+        <div class="view" style="max-width:1920px;margin:0 auto;width:100%">
+
+            <div class="page-head">
+                <div>
+                    <h1>@Titel</h1>
+                    <p>@Untertitel</p>
+                </div>
+                <button type="button" class="btn primary" style="padding:12px 21px;font-size:18.75px;gap:9px" @onclick="() => neuOffen = !neuOffen">
+                    <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"></path></svg>
+                    Neuer Artikel
+                </button>
+            </div>
+
+            @if (neuOffen)
+            {
+                <div class="panel">
+                    <div class="panel-head">
+                        <h2>Neuer Artikel</h2>
+                    </div>
+                    <div class="info-note" style="margin-bottom:14px">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="9"></circle><path d="M12 16v-5M12 8h.01"></path></svg>
+                        <span>Ein Eintrag ist ein Anlage-Vorhaben — eine Herstellerliste mit acht Sorten bleibt ein Eintrag.</span>
+                    </div>
+
+                    <div class="field-row">
+                        <span class="lbl">Shop</span>
+                        <div>
+                            <div class="seg">
+                                @foreach (var m in Enum.GetValues<Marke>())
                                 {
-                                    <option value="@s">@Label(s)</option>
+                                    <button type="button" class="@(neu.Marke == m ? "on" : "")" @onclick="() => neu.Marke = m">@m</button>
                                 }
-                            </select>
-                        </td>
-                        <td>@eintrag.EingetragenVon</td>
-                        <td>
-                            <button type="button" class="btn btn-sm btn-outline-danger" @onclick="() => LoeschenAsync(eintrag.Id)">Löschen</button>
-                        </td>
-                    </tr>
-                    @if (aufgeklappt.Contains(eintrag.Id))
-                    {
-                        <tr>
-                            <td></td>
-                            <td colspan="6">
-                                @if (!string.IsNullOrWhiteSpace(eintrag.Notiz))
-                                {
-                                    <p><strong>Notiz:</strong> @eintrag.Notiz</p>
-                                }
+                            </div>
+                            <div class="desc">Für welchen Shop der Artikel angelegt werden muss.</div>
+                        </div>
+                    </div>
 
-                                @if (eintrag.ImportTabelleJson is { } json)
+                    <div class="field-row">
+                        <span class="lbl">Artikelname</span>
+                        <div>
+                            <input type="text" @bind="neu.Artikelname" @bind:event="oninput" placeholder="z. B. SIC Longfill Serie" style="width:100%;max-width:460px" />
+                        </div>
+                    </div>
+
+                    <div class="field-row">
+                        <span class="lbl">Priorität</span>
+                        <div>
+                            <div class="seg">
+                                @foreach (var p in Enum.GetValues<Prioritaet>())
                                 {
-                                    var tabelle = SpreadsheetTable.FromJson(json);
-                                    <p class="text-muted mb-1">Aus <strong>@eintrag.Quelle</strong> importiert (@tabelle.Rows.Count Zeilen):</p>
-                                    <div class="table-responsive mb-2">
-                                        <table class="table table-sm table-bordered">
-                                            <thead>
-                                                <tr>
-                                                    @foreach (var header in tabelle.Headers)
-                                                    {
-                                                        <th>@header</th>
-                                                    }
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                @foreach (var zeile in tabelle.Rows)
+                                    <button type="button" class="@(neu.Prioritaet == p ? "on" : "")" @onclick="() => neu.Prioritaet = p">@Label(p)</button>
+                                }
+                            </div>
+                            <div class="desc">Standard ist Niedrig.</div>
+                        </div>
+                    </div>
+
+                    <div class="field-row">
+                        <span class="lbl">Release-Datum</span>
+                        <div>
+                            <input type="date" value="@(neu.ReleaseDatum?.ToString("yyyy-MM-dd"))" @onchange="OnDraftReleaseGeaendert" />
+                            <div class="desc">Optional — ohne Datum steht der Eintrag im Backlog der Zeitachse.</div>
+                        </div>
+                    </div>
+
+                    <div class="field-row">
+                        <span class="lbl">Notiz</span>
+                        <div>
+                            <textarea @bind="neu.Notiz" @bind:event="oninput" placeholder="Worauf es bei dieser Anlage ankommt" style="max-width:560px"></textarea>
+                        </div>
+                    </div>
+
+                    <div class="field-row">
+                        <span class="lbl">Excel-Liste</span>
+                        <div>
+                            <div class="filter-bar" style="align-items:center">
+                                <label class="btn" style="position:relative;overflow:hidden">
+                                    Datei wählen (.xlsx)
+                                    <InputFile OnChange="NeueImportDateiAusgewaeltAsync" accept=".xlsx" style="position:absolute;inset:0;opacity:0;cursor:pointer" />
+                                </label>
+                                <span class="chip">@(neuImportDateiname is not null ? $"{neuImportDateiname} · {neuImportTabelle!.Rows.Count} Zeilen erkannt" : "keine Datei gewählt")</span>
+                            </div>
+                            @if (neuImportFehler is not null)
+                            {
+                                <div class="error-note" style="margin-top:8px">
+                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="9"></circle><path d="M12 16v-5M12 8h.01"></path></svg>
+                                    <span>@neuImportFehler</span>
+                                </div>
+                            }
+                            <div class="desc">Wird unverändert an diesen einen Eintrag gehängt, nicht in Zeilen zerlegt.</div>
+                        </div>
+                    </div>
+
+                    <div class="filter-bar" style="align-items:center;margin-top:16px">
+                        <button type="button" class="btn primary" @onclick="AnlegenAsync" disabled="@AnlegenGesperrt">Anlegen</button>
+                        <button type="button" class="btn ghost" @onclick="() => neuOffen = false">Abbrechen</button>
+                        <span class="hint">@AnlegenHinweis</span>
+                    </div>
+                </div>
+            }
+
+            @if (eintraege is null)
+            {
+                <p class="hint">Lädt…</p>
+            }
+            else if (ansicht == Ansicht.Neuanlagen)
+            {
+                <div class="view">
+                    <div class="filter-bar">
+                        <div class="seg">
+                            @foreach (var f in Enum.GetValues<AnzeigeFilter>())
+                            {
+                                <button type="button" class="@(filter == f ? "on" : "")" @onclick="() => filter = f">@Label(f)<span class="cnt">@Anzahl(f)</span></button>
+                            }
+                        </div>
+                        @if (ArchivierbarAnzahl > 0)
+                        {
+                            <button type="button" class="btn" @onclick="AlleArchivierenAsync">Angelegte ins Archiv (@ArchivierbarAnzahl)</button>
+                        }
+                    </div>
+
+                    <div class="table-wrap">
+                        <table style="min-width:1040px">
+                            <thead>
+                                <tr>
+                                    <th style="width:104px">Priorität</th>
+                                    <th style="width:66px">Shop</th>
+                                    <th>Artikel</th>
+                                    <th style="width:116px">Release</th>
+                                    <th style="width:148px">Status</th>
+                                    <th style="width:104px">Eingetragen</th>
+                                    <th style="width:150px">Anhang</th>
+                                    <th style="width:116px"></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @{ var zeilen = GefilterteZeilen(); }
+                                @foreach (var eintrag in zeilen)
+                                {
+                                    <tr style="cursor:pointer" @onclick="() => selId = eintrag.Id">
+                                        <td><PrioBadge Prioritaet="eintrag.Prioritaet" /></td>
+                                        <td><ShopChip Marke="eintrag.Marke" /></td>
+                                        <td class="supplier-cell">
+                                            <div class="alias">@eintrag.Artikelname</div>
+                                            <div class="real">@Nr(eintrag.Id)</div>
+                                        </td>
+                                        <td class="num">@Fmt(eintrag.ReleaseDatum)</td>
+                                        <td>
+                                            <select value="@eintrag.Status" @onclick:stopPropagation @onchange:stopPropagation @onchange="e => StatusAendernAsync(eintrag, e)" style="font-size:12px;padding:5px 8px">
+                                                @foreach (var s in Enum.GetValues<ArtikelStatus>())
                                                 {
-                                                    <tr>
-                                                        @for (var i = 0; i < tabelle.Headers.Count; i++)
-                                                        {
-                                                            <td>@(i < zeile.Count ? zeile[i] : null)</td>
-                                                        }
-                                                    </tr>
+                                                    <option value="@s">@Label(s)</option>
                                                 }
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                    <label class="form-label">Andere Datei anhängen (ersetzt die aktuelle Liste)</label>
+                                            </select>
+                                        </td>
+                                        <td>@eintrag.EingetragenVon</td>
+                                        <td>
+                                            @if (eintrag.Quelle is not null)
+                                            {
+                                                <span class="chip" title="@AnhangTitel(eintrag)">@eintrag.Quelle</span>
+                                            }
+                                            else
+                                            {
+                                                <span class="hint" title="keine Liste angehängt">–</span>
+                                            }
+                                        </td>
+                                        <td>
+                                            <button type="button" class="btn tiny" @onclick:stopPropagation @onclick="() => ArchivWechselnAsync(eintrag)">@(eintrag.Archiviert ? "Zurückholen" : "Archivieren")</button>
+                                        </td>
+                                    </tr>
                                 }
-                                else
+                                @if (zeilen.Count == 0)
                                 {
-                                    <p class="text-muted mb-1">Noch keine Excel-Liste angehängt.</p>
-                                    <label class="form-label">Excel-Liste anhängen</label>
+                                    <tr class="empty-row"><td colspan="8">@(filter == AnzeigeFilter.Archiv ? "Noch nichts archiviert." : "Nichts in diesem Filter.")</td></tr>
                                 }
-                                <InputFile OnChange="e => AnhaengenAsync(eintrag.Id, e)" class="form-control" accept=".xlsx" style="max-width: 24rem" />
-                                @if (anhaengenFehler is { } fehler && fehler.ArtikelId == eintrag.Id)
-                                {
-                                    <div class="text-danger">@fehler.Meldung</div>
-                                }
-                            </td>
-                        </tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div class="info-note">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="9"></circle><path d="M12 16v-5M12 8h.01"></path></svg>
+                        <span>Zeile anklicken öffnet den Artikel mit Notiz und angehängter Herstellerliste. Angelegte Artikel wanderst du ins Archiv, damit die Liste kurz bleibt — gelöscht wird nichts.</span>
+                    </div>
+                </div>
+            }
+            else if (ansicht == Ansicht.Statusspalten)
+            {
+                <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;align-items:start">
+                    @foreach (var status in StatusReihenfolge)
+                    {
+                        var items = Aktiv.Where(e => e.Status == status).ToList();
+                        <div class="panel" style="padding:18px 0 4px">
+                            <div class="panel-head" style="padding:0 20px">
+                                <h2>@Label(status)</h2>
+                                <span class="count">@items.Count</span>
+                            </div>
+                            <table>
+                                <tbody>
+                                    @foreach (var eintrag in items)
+                                    {
+                                        <tr style="cursor:pointer" @onclick="() => selId = eintrag.Id">
+                                            <td class="supplier-cell">
+                                                <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-bottom:5px">
+                                                    <PrioBadge Prioritaet="eintrag.Prioritaet" />
+                                                    <ShopChip Marke="eintrag.Marke" />
+                                                </div>
+                                                <div class="alias">@eintrag.Artikelname</div>
+                                                <div class="real">@eintrag.EingetragenVon · @(eintrag.ReleaseDatum is { } d ? Fmt(d) : "kein Termin")</div>
+                                            </td>
+                                        </tr>
+                                    }
+                                    @if (items.Count == 0)
+                                    {
+                                        <tr class="empty-row"><td>Nichts in diesem Zustand.</td></tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
                     }
+                </div>
+            }
+            else
+            {
+                <div class="view">
+                    <div class="table-wrap">
+                        <div style="display:grid;grid-template-columns:148px repeat(8,minmax(126px,1fr));min-width:1156px;background:var(--surface-raised);border-bottom:1px solid var(--line)">
+                            <span style="padding:10px 12px;font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--ink-faint);font-weight:600">Priorität</span>
+                            @foreach (var w in Wochen)
+                            {
+                                <span style="display:flex;flex-direction:column;gap:1px;padding:10px 12px;border-left:1px solid var(--line);color:@(w.IstAktuelleWoche ? "var(--accent-ink)" : "var(--ink-faint)");background:@(w.IstAktuelleWoche ? "var(--accent-soft)" : "transparent")">
+                                    <span style="font-size:11px;text-transform:uppercase;letter-spacing:.04em;font-weight:600">KW @w.Nr</span>
+                                    <span class="mono" style="font-size:11px;color:var(--ink-faint)">@w.StartLabel</span>
+                                </span>
+                            }
+                        </div>
+                        @foreach (var p in new[] { Prioritaet.Hoch, Prioritaet.Mittel, Prioritaet.Niedrig })
+                        {
+                            <div style="display:grid;grid-template-columns:148px repeat(8,minmax(126px,1fr));min-width:1156px;border-bottom:1px solid var(--line)">
+                                <span style="padding:12px;display:flex;align-items:flex-start"><PrioBadge Prioritaet="p" /></span>
+                                @foreach (var w in Wochen)
+                                {
+                                    <span style="display:flex;flex-direction:column;gap:6px;padding:8px;border-left:1px solid var(--line);background:@(w.IstAktuelleWoche ? "var(--accent-soft)" : "transparent")">
+                                        @foreach (var eintrag in Aktiv.Where(e => e.Prioritaet == p && e.ReleaseDatum.HasValue && KwSchluessel(e.ReleaseDatum!.Value) == (w.Jahr, w.Nr)))
+                                        {
+                                            <button type="button" @onclick="() => selId = eintrag.Id" style="display:flex;flex-direction:column;gap:2px;text-align:left;cursor:pointer;padding:7px 9px;background:var(--surface);border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:var(--radius-s);color:var(--ink);font:inherit;width:100%">
+                                                <span style="font-size:12.5px;font-weight:500;line-height:1.3">@eintrag.Artikelname</span>
+                                                <span class="mono" style="font-size:10.5px;color:var(--ink-faint)">@(eintrag.Marke == Marke.Dartalarm ? "DT" : "DA") · @eintrag.EingetragenVon</span>
+                                            </button>
+                                        }
+                                    </span>
+                                }
+                            </div>
+                        }
+                    </div>
+
+                    <div class="panel" style="padding:18px 0 4px">
+                        <div class="panel-head" style="padding:0 20px">
+                            <h2>Ohne Release-Datum</h2>
+                            <span class="count">@(OhneDatum.Count) Einträge warten auf einen Termin</span>
+                        </div>
+                        <table>
+                            <tbody>
+                                @foreach (var eintrag in OhneDatum)
+                                {
+                                    <tr style="cursor:pointer" @onclick="() => selId = eintrag.Id">
+                                        <td style="width:1%;padding-right:0"><PrioBadge Prioritaet="eintrag.Prioritaet" /></td>
+                                        <td style="width:1%"><ShopChip Marke="eintrag.Marke" /></td>
+                                        <td class="supplier-cell">
+                                            <div class="alias">@eintrag.Artikelname</div>
+                                            <div class="real">@Nr(eintrag.Id) · @eintrag.EingetragenVon</div>
+                                        </td>
+                                        <td style="text-align:right">@Label(eintrag.Status)</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            }
+
+        </div>
+    </main>
+</div>
+
+@if (SelEintrag is { } sel)
+{
+    <div class="detail">
+        <div class="detail-head">
+            <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;min-width:0">
+                <h2 class="mono" style="font-size:18px">@Nr(sel.Id)</h2>
+                <span style="font-size:15.5px;font-weight:600">@sel.Artikelname</span>
+                <ShopChip Marke="sel.Marke" />
+                <PrioBadge Prioritaet="sel.Prioritaet" />
+            </div>
+            <button type="button" class="btn" @onclick="() => selId = null">Schließen <span class="mono" style="opacity:.6">Esc</span></button>
+        </div>
+
+        <div class="detail-body">
+            <div class="detail-info">
+                <div class="panel">
+                    <div class="kv-grid">
+                        <div class="kv">
+                            <div class="k">Status</div>
+                            <div class="v">
+                                <select value="@sel.Status" @onchange="e => StatusAendernAsync(sel, e)" style="width:100%">
+                                    @foreach (var s in Enum.GetValues<ArtikelStatus>())
+                                    {
+                                        <option value="@s">@Label(s)</option>
+                                    }
+                                </select>
+                            </div>
+                        </div>
+                        <div class="kv">
+                            <div class="k">Release-Datum</div>
+                            <div class="v"><input type="date" value="@(sel.ReleaseDatum?.ToString("yyyy-MM-dd"))" @onchange="e => ReleaseAendernAsync(sel, e)" style="width:100%" /></div>
+                        </div>
+                        <div class="kv">
+                            <div class="k">Eingetragen von</div>
+                            <div class="v">@sel.EingetragenVon</div>
+                        </div>
+                        <div class="kv">
+                            <div class="k">Angelegt am</div>
+                            <div class="v mono">@sel.ErstelltAm.ToString("dd.MM.yyyy")</div>
+                        </div>
+                        <div class="kv">
+                            <div class="k">Shop</div>
+                            <div class="v">@sel.Marke</div>
+                        </div>
+                        <div class="kv">
+                            <div class="k">Kalenderwoche</div>
+                            <div class="v mono">@(sel.ReleaseDatum is { } kwd ? $"KW {Kw(kwd)}" : "—")</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="panel">
+                    <div class="panel-head">
+                        <h2>Notiz</h2>
+                    </div>
+                    <div class="text-preview">@(string.IsNullOrWhiteSpace(sel.Notiz) ? "Keine Notiz hinterlegt." : sel.Notiz)</div>
+                </div>
+
+                <div class="filter-bar" style="margin-top:auto;padding-top:10px;border-top:1px dashed var(--line)">
+                    <button type="button" class="btn" @onclick="() => ArchivWechselnAsync(sel)">@(sel.Archiviert ? "Zurückholen" : "Ins Archiv")</button>
+                    <button type="button" class="btn danger" @onclick="() => LoeschenAsync(sel)">Löschen</button>
+                </div>
+            </div>
+
+            <div class="doc-pane">
+                <div style="flex:none;display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:9px 12px;background:var(--surface-raised);border-bottom:1px solid var(--line)">
+                    <span class="mono" style="font-size:11.5px;color:var(--ink-soft)">@(sel.Quelle ?? "kein Anhang")</span>
+                    <span class="chip">@AnhangInfo(sel)</span>
+                    <label class="btn tiny" style="position:relative;overflow:hidden;margin-left:auto">
+                        @(sel.ImportTabelleJson is not null ? "Andere Datei anhängen" : "Datei wählen")
+                        <InputFile OnChange="e => AnhaengenAsync(sel.Id, e)" accept=".xlsx" style="position:absolute;inset:0;opacity:0;cursor:pointer" />
+                    </label>
+                </div>
+
+                @if (anhaengenFehler is { } fehler && fehler.ArtikelId == sel.Id)
+                {
+                    <div class="error-note" style="margin:8px 12px 0">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="9"></circle><path d="M12 16v-5M12 8h.01"></path></svg>
+                        <span>@fehler.Meldung</span>
+                    </div>
                 }
-            </tbody>
-        </table>
-    }
+
+                @if (sel.ImportTabelleJson is { } json)
+                {
+                    var tabelle = SpreadsheetTable.FromJson(json);
+                    <div style="flex:1;min-height:0;overflow:auto">
+                        <table style="min-width:100%">
+                            <thead>
+                                <tr>
+                                    @foreach (var h in tabelle.Headers)
+                                    {
+                                        <th style="white-space:nowrap">@h</th>
+                                    }
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var zeile in tabelle.Rows)
+                                {
+                                    <tr>
+                                        @for (var i = 0; i < tabelle.Headers.Count; i++)
+                                        {
+                                            <td style="white-space:nowrap">@(i < zeile.Count ? zeile[i] : null)</td>
+                                        }
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+                else
+                {
+                    <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:44px 20px;text-align:center;color:var(--ink-faint);font-size:12.5px">
+                        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"></path><path d="M14 3v5h5"></path></svg>
+                        <strong style="color:var(--ink-soft);font-weight:600">Noch keine Herstellerliste angehängt</strong>
+                        <span>Eine .xlsx wird unverändert an diesen Eintrag gehängt — Kopfzeile und alle Zeilen, ohne festes Spaltenschema.</span>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+}
+
+<PersonenAuswahl OnAusgewaehlt="OnPersonAusgewaehltAsync" />
+
+@if (toast is not null)
+{
+    <div class="panel" style="position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:70;display:flex;align-items:center;gap:10px;padding:11px 16px;border-radius:var(--radius-s);box-shadow:var(--shadow);font-size:12.5px">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.8"><path d="M20 6L9 17l-5-5"></path></svg>
+        @toast
+    </div>
 }
 
 @code {
+    private enum Ansicht { Neuanlagen, Statusspalten, Zeitachse }
+    private enum AnzeigeFilter { Alle, Offen, InArbeit, Angelegt, Archiv }
+    private record WocheInfo(int Jahr, int Nr, string StartLabel, bool IstAktuelleWoche);
+
+    private static readonly ArtikelStatus[] StatusReihenfolge =
+        [ArtikelStatus.Offen, ArtikelStatus.InArbeit, ArtikelStatus.Angelegt];
+
     private List<ArtikelEintrag>? eintraege;
-    private readonly HashSet<int> aufgeklappt = [];
-    private bool zeigeNeuFormular;
-    private NeuerEintrag neu = new();
+    private Ansicht ansicht = Ansicht.Neuanlagen;
+    private AnzeigeFilter filter = AnzeigeFilter.Alle;
+    private int? selId;
+    private bool neuOffen;
+    private NeuerEintragModel neu = new();
     private string? neuImportDateiname;
     private SpreadsheetTable? neuImportTabelle;
     private string? neuImportFehler;
     private (int ArtikelId, string Meldung)? anhaengenFehler;
+    private string? toast;
+    private CancellationTokenSource? toastCts;
+    private List<WocheInfo> Wochen { get; set; } = [];
+    private string? theme;
+    private bool dunkelBevorzugt;
+    private DotNetObjectReference<Artikel>? escRef;
+
+    private List<ArtikelEintrag> Aktiv => eintraege!.Where(e => !e.Archiviert).ToList();
+    private List<ArtikelEintrag> OhneDatum => Aktiv.Where(e => e.ReleaseDatum is null).ToList();
+    private int ArchivierbarAnzahl => Aktiv.Count(e => e.Status == ArtikelStatus.Angelegt);
+    private ArtikelEintrag? SelEintrag => eintraege?.FirstOrDefault(e => e.Id == selId);
+
+    private bool AnlegenGesperrt => string.IsNullOrWhiteSpace(neu.Artikelname) || AktivePerson.Name is null;
+
+    private string AnlegenHinweis => AktivePerson.Name is null
+        ? "Erst Person wählen."
+        : string.IsNullOrWhiteSpace(neu.Artikelname)
+            ? "Artikelname fehlt."
+            : "Sortiert sich nach Priorität und Release ein.";
+
+    private string Titel => ansicht switch
+    {
+        Ansicht.Neuanlagen => "Neuanlagen",
+        Ansicht.Statusspalten => "Statusspalten",
+        _ => "Release-Zeitachse",
+    };
+
+    private string Untertitel => ansicht switch
+    {
+        Ansicht.Neuanlagen => "Alle geplanten Artikel-Neuanlagen an einem Ort — Priorität, Release-Datum und wer dran ist.",
+        Ansicht.Statusspalten => "Derselbe Bestand nach Zustand geteilt: Offen, In Arbeit, Angelegt. Für den Blick, wer gerade dran ist.",
+        _ => "Release-Termine über acht Wochen, geordnet nach Priorität. Einträge ohne Termin stehen darunter.",
+    };
+
+    private bool DunkelAktiv => theme switch
+    {
+        "dark" => true,
+        "light" => false,
+        _ => dunkelBevorzugt,
+    };
+
+    private string ThemeTitel => DunkelAktiv ? "Auf hell umschalten" : "Auf dunkel umschalten";
+
+    private string ThemeIconPfad => DunkelAktiv
+        ? "M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9z"
+        : "M12 5V3M12 21v-2M5 12H3M21 12h-2M6.4 6.4L5 5M19 19l-1.4-1.4M17.6 6.4L19 5M5 19l1.4-1.4M16 12a4 4 0 1 1-8 0 4 4 0 0 1 8 0z";
 
     protected override async Task OnInitializedAsync()
     {
         AktivePerson.OnChange += StateHasChanged;
+        Wochen = BuildWochen();
         await LadenAsync();
     }
 
-    public void Dispose()
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+
+        theme = await JS.InvokeAsync<string?>("themeStore.get");
+        dunkelBevorzugt = await JS.InvokeAsync<bool>("themeStore.prefersDark");
+        StateHasChanged();
+
+        escRef = DotNetObjectReference.Create(this);
+        await JS.InvokeVoidAsync("escBinder.listen", escRef);
+    }
+
+    [JSInvokable]
+    public void EscGedrueckt()
+    {
+        if (selId is null) return;
+        selId = null;
+        InvokeAsync(StateHasChanged);
+    }
+
+    public async ValueTask DisposeAsync()
     {
         AktivePerson.OnChange -= StateHasChanged;
+        toastCts?.Cancel();
+        if (escRef is not null)
+        {
+            try { await JS.InvokeVoidAsync("escBinder.unlisten"); }
+            catch (JSDisconnectedException) { /* Verbindung schon weg */ }
+            escRef.Dispose();
+        }
     }
 
     private async Task LadenAsync()
@@ -195,85 +575,90 @@ else
         eintraege = await ArtikelService.GetAllAsync();
     }
 
-    private async Task NeueImportDateiAusgewaeltAsync(InputFileChangeEventArgs e)
+    private void AnsichtWechseln(Ansicht neueAnsicht)
     {
-        neuImportFehler = null;
-        try
+        ansicht = neueAnsicht;
+        selId = null;
+    }
+
+    private async Task ThemeUmschaltenAsync()
+    {
+        theme = DunkelAktiv ? "light" : "dark";
+        await JS.InvokeVoidAsync("themeStore.set", theme);
+        await JS.InvokeVoidAsync("themeStore.apply", theme);
+    }
+
+    private Task OnPersonAusgewaehltAsync(string person)
+    {
+        Flash($"Eingetragen als {person} — ein Jahr im Browser gemerkt.");
+        return Task.CompletedTask;
+    }
+
+    private List<ArtikelEintrag> GefilterteZeilen()
+    {
+        if (filter == AnzeigeFilter.Archiv) return eintraege!.Where(e => e.Archiviert).ToList();
+        var aktiv = Aktiv;
+        return filter switch
         {
-            var tabelle = await LiesXlsxAsync(e.File);
-            neuImportTabelle = tabelle;
-            neuImportDateiname = e.File.Name;
+            AnzeigeFilter.Offen => aktiv.Where(e => e.Status == ArtikelStatus.Offen).ToList(),
+            AnzeigeFilter.InArbeit => aktiv.Where(e => e.Status == ArtikelStatus.InArbeit).ToList(),
+            AnzeigeFilter.Angelegt => aktiv.Where(e => e.Status == ArtikelStatus.Angelegt).ToList(),
+            _ => aktiv,
+        };
+    }
+
+    private int Anzahl(AnzeigeFilter f) => f switch
+    {
+        AnzeigeFilter.Archiv => eintraege!.Count(e => e.Archiviert),
+        AnzeigeFilter.Offen => Aktiv.Count(e => e.Status == ArtikelStatus.Offen),
+        AnzeigeFilter.InArbeit => Aktiv.Count(e => e.Status == ArtikelStatus.InArbeit),
+        AnzeigeFilter.Angelegt => Aktiv.Count(e => e.Status == ArtikelStatus.Angelegt),
+        _ => Aktiv.Count,
+    };
+
+    private List<WocheInfo> BuildWochen()
+    {
+        var heute = DateOnly.FromDateTime(DateTime.Now);
+        var seitMontag = ((int)heute.DayOfWeek + 6) % 7;
+        var montag = heute.AddDays(-seitMontag);
+        var liste = new List<WocheInfo>();
+        for (var i = 0; i < 8; i++)
+        {
+            var tag = montag.AddDays(i * 7);
+            var (jahr, woche) = KwSchluessel(tag);
+            liste.Add(new WocheInfo(jahr, woche, tag.ToString("dd.MM."), i == 0));
         }
-        catch (Exception ex) when (ex is InvalidDataException or IOException)
-        {
-            neuImportFehler = $"Datei konnte nicht gelesen werden: {ex.Message}";
-            neuImportTabelle = null;
-            neuImportDateiname = null;
-        }
+        return liste;
     }
 
-    private async Task AnlegenAsync()
-    {
-        if (AktivePerson.Name is not { } person) return;
+    private static int Kw(DateOnly datum) => ISOWeek.GetWeekOfYear(datum.ToDateTime(TimeOnly.MinValue));
 
-        await ArtikelService.AddAsync(new ArtikelEintrag
-        {
-            Artikelname = neu.Artikelname,
-            Prioritaet = neu.Prioritaet,
-            ReleaseDatum = neu.ReleaseDatum,
-            EingetragenVon = person,
-            Notiz = string.IsNullOrWhiteSpace(neu.Notiz) ? null : neu.Notiz,
-            ImportTabelleJson = neuImportTabelle?.ToJson(),
-            Quelle = neuImportDateiname,
-        });
-        neu = new();
-        neuImportTabelle = null;
-        neuImportDateiname = null;
-        neuImportFehler = null;
-        zeigeNeuFormular = false;
-        await LadenAsync();
+    /// <summary>Jahr+Woche als Schlüssel für die Zeitachse: ISOWeek.GetYear (nicht das Kalenderjahr),
+    /// weil Anfang Januar/Ende Dezember zur letzten bzw. ersten ISO-Woche des jeweils anderen Jahres
+    /// gehören kann. Ohne das Jahr würden Einträge aus verschiedenen Jahren mit derselben KW-Nummer
+    /// (z. B. KW 39 in einem Jahr und KW 39 im nächsten) fälschlich in derselben Spalte landen.</summary>
+    private static (int Jahr, int Woche) KwSchluessel(DateOnly datum)
+    {
+        var dt = datum.ToDateTime(TimeOnly.MinValue);
+        return (ISOWeek.GetYear(dt), ISOWeek.GetWeekOfYear(dt));
     }
 
-    private async Task AnhaengenAsync(int artikelId, InputFileChangeEventArgs e)
+    private static string Nr(int id) => $"AP-{id:D4}";
+
+    private static string Fmt(DateOnly? datum) => datum?.ToString("dd.MM.yyyy") ?? "–";
+
+    private static string AnhangTitel(ArtikelEintrag e)
     {
-        anhaengenFehler = null;
-        try
-        {
-            var tabelle = await LiesXlsxAsync(e.File);
-            await ArtikelImportService.AttachAsync(artikelId, tabelle, e.File.Name);
-            aufgeklappt.Add(artikelId);
-            await LadenAsync();
-        }
-        catch (Exception ex) when (ex is InvalidDataException or IOException)
-        {
-            anhaengenFehler = (artikelId, $"Datei konnte nicht gelesen werden: {ex.Message}");
-        }
+        if (e.Quelle is null || e.ImportTabelleJson is not { } json) return "keine Liste angehängt";
+        var tabelle = SpreadsheetTable.FromJson(json);
+        return $"{e.Quelle} · {tabelle.Rows.Count} Zeilen";
     }
 
-    private static async Task<SpreadsheetTable> LiesXlsxAsync(IBrowserFile file)
+    private static string AnhangInfo(ArtikelEintrag e)
     {
-        await using var stream = file.OpenReadStream(maxAllowedSize: 20 * 1024 * 1024);
-        using var buffer = new MemoryStream();
-        await stream.CopyToAsync(buffer);
-        buffer.Position = 0;
-        return ArtikelImportService.ReadXlsx(buffer);
-    }
-
-    private async Task StatusAendernAsync(ArtikelEintrag eintrag, string neuerStatus)
-    {
-        eintrag.Status = Enum.Parse<ArtikelStatus>(neuerStatus);
-        await ArtikelService.UpdateAsync(eintrag);
-    }
-
-    private async Task LoeschenAsync(int id)
-    {
-        await ArtikelService.DeleteAsync(id);
-        await LadenAsync();
-    }
-
-    private void ToggleAufklappen(int id)
-    {
-        if (!aufgeklappt.Remove(id)) aufgeklappt.Add(id);
+        if (e.ImportTabelleJson is not { } json) return "unverändert übernommen";
+        var tabelle = SpreadsheetTable.FromJson(json);
+        return $"{tabelle.Rows.Count} Zeilen · {tabelle.Headers.Count} Spalten";
     }
 
     private static string Label(Prioritaet p) => p switch
@@ -292,18 +677,158 @@ else
         _ => s.ToString(),
     };
 
-    private static string PrioritaetsBadge(Prioritaet p) => p switch
+    private static string Label(AnzeigeFilter f) => f switch
     {
-        Prioritaet.Hoch => "text-bg-danger",
-        Prioritaet.Mittel => "text-bg-warning",
-        Prioritaet.Niedrig => "text-bg-secondary",
-        _ => "text-bg-secondary",
+        AnzeigeFilter.Alle => "Alle",
+        AnzeigeFilter.Offen => "Offen",
+        AnzeigeFilter.InArbeit => "In Arbeit",
+        AnzeigeFilter.Angelegt => "Angelegt",
+        AnzeigeFilter.Archiv => "Archiv",
+        _ => f.ToString(),
     };
 
-    private class NeuerEintrag
+    private void Flash(string nachricht)
+    {
+        toast = nachricht;
+        toastCts?.Cancel();
+        var cts = new CancellationTokenSource();
+        toastCts = cts;
+        _ = HideToastNachVerzoegerungAsync(cts.Token);
+    }
+
+    private async Task HideToastNachVerzoegerungAsync(CancellationToken ct)
+    {
+        try
+        {
+            await Task.Delay(2600, ct);
+            toast = null;
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (TaskCanceledException) { /* neuer Toast hat diesen abgelöst */ }
+    }
+
+    private async Task StatusAendernAsync(ArtikelEintrag eintrag, ChangeEventArgs e)
+    {
+        eintrag.Status = Enum.Parse<ArtikelStatus>((string)e.Value!);
+        await ArtikelService.UpdateAsync(eintrag);
+        await LadenAsync();
+    }
+
+    private async Task ReleaseAendernAsync(ArtikelEintrag eintrag, ChangeEventArgs e)
+    {
+        var text = e.Value as string;
+        eintrag.ReleaseDatum = string.IsNullOrEmpty(text) ? null : DateOnly.Parse(text);
+        await ArtikelService.UpdateAsync(eintrag);
+        await LadenAsync();
+    }
+
+    private void OnDraftReleaseGeaendert(ChangeEventArgs e)
+    {
+        var text = e.Value as string;
+        neu.ReleaseDatum = string.IsNullOrEmpty(text) ? null : DateOnly.Parse(text);
+    }
+
+    private async Task ArchivWechselnAsync(ArtikelEintrag eintrag)
+    {
+        var neuerWert = !eintrag.Archiviert;
+        await ArtikelService.SetArchiviertAsync(eintrag.Id, neuerWert);
+        selId = null;
+        var name = eintrag.Artikelname;
+        await LadenAsync();
+        Flash(neuerWert ? $"„{name}“ ins Archiv verschoben." : $"„{name}“ zurück in die Liste.");
+    }
+
+    private async Task AlleArchivierenAsync()
+    {
+        var anzahl = await ArtikelService.ArchiviereAngelegteAsync();
+        await LadenAsync();
+        Flash($"{anzahl} angelegte Artikel ins Archiv verschoben.");
+    }
+
+    private async Task LoeschenAsync(ArtikelEintrag eintrag)
+    {
+        var name = eintrag.Artikelname;
+        await ArtikelService.DeleteAsync(eintrag.Id);
+        selId = null;
+        await LadenAsync();
+        Flash($"„{name}“ gelöscht.");
+    }
+
+    private async Task NeueImportDateiAusgewaeltAsync(InputFileChangeEventArgs e)
+    {
+        neuImportFehler = null;
+        try
+        {
+            neuImportTabelle = await LiesXlsxAsync(e.File);
+            neuImportDateiname = e.File.Name;
+        }
+        catch (Exception ex) when (ex is InvalidDataException or IOException)
+        {
+            neuImportFehler = $"Datei konnte nicht gelesen werden: {ex.Message}";
+            neuImportTabelle = null;
+            neuImportDateiname = null;
+        }
+    }
+
+    private async Task AnhaengenAsync(int artikelId, InputFileChangeEventArgs e)
+    {
+        anhaengenFehler = null;
+        try
+        {
+            var tabelle = await LiesXlsxAsync(e.File);
+            await ArtikelImportService.AttachAsync(artikelId, tabelle, e.File.Name);
+            await LadenAsync();
+            Flash($"{e.File.Name} angehängt.");
+        }
+        catch (Exception ex) when (ex is InvalidDataException or IOException)
+        {
+            anhaengenFehler = (artikelId, $"Datei konnte nicht gelesen werden: {ex.Message}");
+        }
+    }
+
+    private static async Task<SpreadsheetTable> LiesXlsxAsync(IBrowserFile file)
+    {
+        await using var stream = file.OpenReadStream(maxAllowedSize: 20 * 1024 * 1024);
+        using var buffer = new MemoryStream();
+        await stream.CopyToAsync(buffer);
+        buffer.Position = 0;
+        return ArtikelImportService.ReadXlsx(buffer);
+    }
+
+    private async Task AnlegenAsync()
+    {
+        if (AnlegenGesperrt) return;
+
+        var marke = neu.Marke;
+        var hatDatei = neuImportTabelle is not null;
+        var neuerEintrag = await ArtikelService.AddAsync(new ArtikelEintrag
+        {
+            Artikelname = neu.Artikelname.Trim(),
+            Marke = marke,
+            Prioritaet = neu.Prioritaet,
+            ReleaseDatum = neu.ReleaseDatum,
+            EingetragenVon = AktivePerson.Name!,
+            Notiz = string.IsNullOrWhiteSpace(neu.Notiz) ? null : neu.Notiz,
+            ImportTabelleJson = neuImportTabelle?.ToJson(),
+            Quelle = neuImportDateiname,
+        });
+
+        var name = neuerEintrag.Artikelname;
+        neu = new NeuerEintragModel { Marke = marke };
+        neuImportTabelle = null;
+        neuImportDateiname = null;
+        neuImportFehler = null;
+        neuOffen = false;
+        await LadenAsync();
+        selId = neuerEintrag.Id;
+        Flash($"„{name}“ für {marke} angelegt" + (hatDatei ? " · Liste angehängt." : "."));
+    }
+
+    private class NeuerEintragModel
     {
         public string Artikelname { get; set; } = "";
-        public Prioritaet Prioritaet { get; set; } = Prioritaet.Mittel;
+        public Marke Marke { get; set; } = Marke.Dampfalarm;
+        public Prioritaet Prioritaet { get; set; } = Prioritaet.Niedrig;
         public DateOnly? ReleaseDatum { get; set; }
         public string? Notiz { get; set; }
     }

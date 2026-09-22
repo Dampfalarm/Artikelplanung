@@ -11,6 +11,7 @@ public class ArtikelService(IDbContextFactory<ApplicationDbContext> dbFactory)
         await using var db = await dbFactory.CreateDbContextAsync(ct);
         return await db.ArtikelEintraege
             .OrderByDescending(a => a.Prioritaet)
+            .ThenBy(a => a.ReleaseDatum == null)
             .ThenBy(a => a.ReleaseDatum)
             .ThenByDescending(a => a.ErstelltAm)
             .ToListAsync(ct);
@@ -37,5 +38,23 @@ public class ArtikelService(IDbContextFactory<ApplicationDbContext> dbFactory)
     {
         await using var db = await dbFactory.CreateDbContextAsync(ct);
         await db.ArtikelEintraege.Where(a => a.Id == id).ExecuteDeleteAsync(ct);
+    }
+
+    public async Task SetArchiviertAsync(int id, bool archiviert, CancellationToken ct = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(ct);
+        await db.ArtikelEintraege
+            .Where(a => a.Id == id)
+            .ExecuteUpdateAsync(s => s.SetProperty(a => a.Archiviert, archiviert), ct);
+    }
+
+    /// <summary>Sammelaktion: setzt alle nicht archivierten Einträge mit Status "Angelegt" auf
+    /// archiviert. Gibt die Anzahl der geänderten Einträge zurück.</summary>
+    public async Task<int> ArchiviereAngelegteAsync(CancellationToken ct = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(ct);
+        return await db.ArtikelEintraege
+            .Where(a => !a.Archiviert && a.Status == ArtikelStatus.Angelegt)
+            .ExecuteUpdateAsync(s => s.SetProperty(a => a.Archiviert, true), ct);
     }
 }

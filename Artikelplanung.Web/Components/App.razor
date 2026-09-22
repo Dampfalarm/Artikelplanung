@@ -6,12 +6,24 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <base href="/" />
     <ResourcePreloader />
-    <link rel="stylesheet" href="@Assets["lib/bootstrap/dist/css/bootstrap.min.css"]" />
-    <link rel="stylesheet" href="@Assets["app.css"]" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" />
+    <link rel="stylesheet" href="@Assets["theme.css"]" />
     <link rel="stylesheet" href="@Assets["Artikelplanung.Web.styles.css"]" />
     <ImportMap />
     <link rel="icon" type="image/png" href="favicon.png" />
+    <script>
+        (function () {
+            try {
+                var gespeichert = localStorage.getItem("artikelplanung_theme");
+                if (gespeichert === "dark") document.documentElement.setAttribute("data-theme", "dark");
+                else if (gespeichert === "light") document.documentElement.setAttribute("data-theme", "light");
+            } catch { /* Storage nicht verfügbar, z. B. privates Fenster */ }
+        })();
+    </script>
     <script src="@Assets["js/person-cookie.js"]"></script>
+    <script src="@Assets["js/theme.js"]"></script>
+    <script src="@Assets["js/esc.js"]"></script>
     <HeadOutlet />
 </head>
 

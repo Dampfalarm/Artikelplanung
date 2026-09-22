@@ -2,36 +2,47 @@
 @using Artikelplanung.Web.Services
 @inject IJSRuntime JS
 @inject AktivePersonState AktivePerson
+@implements IDisposable
 
-@if (AktivePerson.Name is null || zeigeAuswahl)
+@if (AktivePerson.Name is null)
 {
-    <div class="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center"
-         style="background: rgba(0,0,0,.5); z-index: 1050;">
-        <div class="bg-white p-4 rounded shadow" style="min-width: 20rem;">
-            <h2 class="h5 mb-3">Wer sitzt gerade am PC?</h2>
-            <div class="d-grid gap-2">
+    <div class="login-shell" style="position:fixed;inset:0;z-index:60;background:var(--paper)">
+        <div class="login-card">
+            <div class="brand" style="border:none;padding:0 0 18px">
+                <span class="brand-mark">
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 7l9-4 9 4v10l-9 4-9-4z"></path><path d="M3 7l9 4 9-4M12 11v10"></path></svg>
+                </span>
+                <span>
+                    <span class="brand-name" style="display:block">Artikelplanung</span>
+                    <span class="brand-sub">Nur im Firmennetz · kein Login</span>
+                </span>
+            </div>
+            <h1 style="font-size:19px;margin-bottom:6px">Wer sitzt gerade am PC?</h1>
+            <p style="font-size:13px;color:var(--ink-soft);margin:0 0 16px">Der Browser merkt sich das ein Jahr. „Eingetragen von" füllt sich danach automatisch — unten links jederzeit wechselbar.</p>
+            <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px">
                 @foreach (var person in Personen.Alle)
                 {
-                    <button type="button" class="btn btn-outline-primary" @onclick="() => AuswaehlenAsync(person)">@person</button>
+                    <button type="button" class="btn" style="justify-content:center" @onclick="() => AuswaehlenAsync(person)">@person</button>
                 }
             </div>
-            @if (AktivePerson.Name is not null)
-            {
-                <button type="button" class="btn btn-link mt-2" @onclick="() => zeigeAuswahl = false">Abbrechen</button>
-            }
         </div>
     </div>
 }
-else
-{
-    <span class="small">
-        Angemeldet als <strong>@AktivePerson.Name</strong>
-        <button type="button" class="btn btn-link btn-sm p-0 ms-1" @onclick="() => zeigeAuswahl = true">wechseln</button>
-    </span>
-}
 
 @code {
-    private bool zeigeAuswahl;
+    [Parameter] public EventCallback<string> OnAusgewaehlt { get; set; }
+
+    protected override void OnInitialized()
+    {
+        // Nicht auf den Elternrender verlassen: "Person wechseln" setzt AktivePerson.Name direkt
+        // zurück, ohne dass sich Parameter dieser Komponente ändern - also selbst abonnieren.
+        AktivePerson.OnChange += StateHasChanged;
+    }
+
+    public void Dispose()
+    {
+        AktivePerson.OnChange -= StateHasChanged;
+    }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -49,6 +60,6 @@ else
     {
         await JS.InvokeVoidAsync("personCookie.set", person);
         AktivePerson.Setzen(person);
-        zeigeAuswahl = false;
+        await OnAusgewaehlt.InvokeAsync(person);
     }
 }

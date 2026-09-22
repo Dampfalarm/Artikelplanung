@@ -1,0 +1,9 @@
+@using Artikelplanung.Web.Models
+
+<span class="chip @(Marke == Marke.Dartalarm ? "alert" : "")" title="@Marke">@Kuerzel</span>
+
+@code {
+    [Parameter] public Marke Marke { get; set; }
+
+    private string Kuerzel => Marke == Marke.Dartalarm ? "DT" : "DA";
+}

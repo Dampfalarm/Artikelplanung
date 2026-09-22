@@ -15,4 +15,13 @@ public class AktivePersonState
         Name = name;
         OnChange?.Invoke();
     }
+
+    /// <summary>"Person wechseln" in der Sidebar: setzt die Auswahl zurück, die Login-Karte
+    /// erscheint erneut. Der Cookie bleibt unangetastet und wird bei der nächsten Auswahl
+    /// überschrieben.</summary>
+    public void Zuruecksetzen()
+    {
+        Name = null;
+        OnChange?.Invoke();
+    }
 }
