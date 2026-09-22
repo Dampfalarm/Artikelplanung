@@ -3,7 +3,9 @@
 ## Status
 
 🛠️ **v1 gebaut, lokal getestet.** Liste mit manueller Anlage und Excel-Import stehen.
-Rollout auf einen Server steht noch aus.
+Rollout-Anleitung steht ([docs/deployment.md](docs/deployment.md) als Referenz, kopierfertige Befehle im
+Artefakt [„Artikelplanung Server-Rollout"](https://claude.ai/artifact/R6v2VSurXsxVXWxHu3nBkg)), Ausrollen
+auf MSDC02 steht noch aus.
 
 ## Grundidee
 
